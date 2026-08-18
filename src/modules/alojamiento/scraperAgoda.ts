@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { nuevoContexto, delayAleatorio } from "../../utils/playwright.js";
 import { crearLogger } from "../../utils/logger.js";
+import { extraerPaisDeDestino } from "./destino.js";
 import type { AlojamientoResultado, ParametrosAlojamiento } from "./types.js";
 
 const logger = crearLogger("scraper:agoda");
@@ -31,16 +32,21 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
   await aceptarCookiesSiAparece(page);
   await delayAleatorio();
 
+  // El destino puede venir cualificado con país tras la desambiguación
+  // (p.ej. "Cuenca, España"); a la caja de búsqueda solo le pasamos el nombre
+  // de la ciudad, y usamos el país por separado para elegir la sugerencia correcta.
+  const paisEsperado = extraerPaisDeDestino(params.destino);
+  const nombreCiudad = params.destino.split(",")[0]!.trim();
+
   const input = page.locator("#textInput");
   await input.click({ timeout: 8000 });
-  await page.keyboard.type(params.destino, { delay: 60 });
+  await page.keyboard.type(nombreCiudad, { delay: 60 });
 
   // El desplegable de Agoda mezcla sugerencias de distinto tipo (ciudad, zona,
   // aeropuerto, e incluso actividades) para el mismo texto. Nos interesan solo
   // las de formato "Ciudad, País" (así se distingue una entrada de ciudad real
-  // de una de actividades tipo "Cuenca free tour"), y de esas preferimos la que
-  // mencione España — para no confundir p.ej. Cuenca (España) con Cuenca (Ecuador).
-  const candidatas = page.getByText(new RegExp(`^${escaparRegex(params.destino)},\\s`, "i"));
+  // de una de actividades tipo "Cuenca free tour").
+  const candidatas = page.getByText(new RegExp(`^${escaparRegex(nombreCiudad)},\\s`, "i"));
   try {
     await candidatas.first().waitFor({ state: "visible", timeout: 8000 });
   } catch {
@@ -48,14 +54,26 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
     return null;
   }
 
-  const totalCandidatas = await candidatas.count();
+  // Si el destino venía cualificado con un país concreto (nombres de ciudad
+  // ambiguos entre países, p.ej. "Cuenca" en España vs. Ecuador), nos quedamos
+  // con la sugerencia que lo mencione. Si ninguna coincide, tratamos el
+  // destino como no cubierto en ese país. Sin país esperado, se usa la primera.
   let sugerenciaElegida = candidatas.first();
-  for (let i = 0; i < totalCandidatas; i++) {
-    const texto = await candidatas.nth(i).innerText().catch(() => "");
-    if (/españa/i.test(texto)) {
-      sugerenciaElegida = candidatas.nth(i);
-      break;
+  if (paisEsperado) {
+    const totalCandidatas = await candidatas.count();
+    let encontrada = null;
+    for (let i = 0; i < totalCandidatas; i++) {
+      const texto = await candidatas.nth(i).innerText().catch(() => "");
+      if (texto.toLowerCase().includes(paisEsperado.toLowerCase())) {
+        encontrada = candidatas.nth(i);
+        break;
+      }
     }
+    if (!encontrada) {
+      logger.info(`Agoda no tiene ninguna sugerencia en ${paisEsperado} para destino=${params.destino}`);
+      return null;
+    }
+    sugerenciaElegida = encontrada;
   }
   await sugerenciaElegida.click();
   await delayAleatorio();

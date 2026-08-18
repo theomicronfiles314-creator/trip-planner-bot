@@ -75,5 +75,6 @@ export async function accionVerTodas(ctx: BotContext): Promise<void> {
 export async function accionCancelar(ctx: BotContext): Promise<void> {
   ctx.session.busquedaEnCurso = null;
   ctx.session.ultimaBusqueda = null;
+  ctx.session.destinoPendiente = null;
   await ctx.reply("Búsqueda cancelada. Cuéntame cuándo quieras planear otro viaje 🧳");
 }

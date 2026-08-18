@@ -8,9 +8,11 @@ import {
   preguntaParaFaltantes,
   interpretarRespuestaDirecta,
 } from "../../nlp/parser.js";
+import type { BusquedaParseada } from "../../nlp/types.js";
 import { buscarAlojamiento } from "../../modules/alojamiento/service.js";
+import { buscarCandidatosDestino } from "../../modules/alojamiento/geocoding.js";
 import { formatearResultadoAlojamiento } from "../presenters/alojamiento.js";
-import { tecladoResultado } from "../keyboards.js";
+import { tecladoResultado, tecladoDesambiguacion } from "../keyboards.js";
 import { accionMasBarato, accionOtraOpcion, accionVerTodas, accionCancelar } from "../acciones.js";
 import { crearLogger } from "../../utils/logger.js";
 import type { BusquedaAlojamientoActiva } from "../session.js";
@@ -74,12 +76,50 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
     return;
   }
 
-  // A partir de aquí, tipo === "alojamiento" con todos los datos obligatorios presentes.
-  const destino = parseoCombinado.destino!;
-  const fechaInicio = parseoCombinado.fechaInicio!;
-  const fechaFin = parseoCombinado.fechaFin!;
-  const personas = parseoCombinado.personas!;
-  const presupuestoMax = parseoCombinado.presupuesto ?? undefined;
+  await procesarBusquedaCompleta(ctx, parseoCombinado);
+}
+
+/**
+ * La búsqueda ya tiene todos los datos obligatorios. Antes de lanzar el
+ * scraping comprueba si el destino es ambiguo entre países (p.ej. "Cuenca"
+ * existe como ciudad relevante en España y en Ecuador): si lo es, pregunta con
+ * botones y no busca todavía — se retoma en el callback de desambiguación
+ * (ver bot/handlers/callbacks.ts). Si no hay ambigüedad, sigue directo.
+ */
+export async function procesarBusquedaCompleta(ctx: BotContext, parseo: BusquedaParseada): Promise<void> {
+  let parseoFinal = parseo;
+  const destino = parseo.destino!;
+
+  // Si el destino ya viene cualificado con país (tras una desambiguación
+  // previa, o porque el usuario ya lo escribió así, p.ej. "Cuenca, Ecuador")
+  // no hace falta volver a preguntar.
+  if (!destino.includes(",")) {
+    const candidatos = await buscarCandidatosDestino(destino);
+
+    if (candidatos.length >= 2) {
+      ctx.session.destinoPendiente = { parseo, candidatos };
+      await ctx.reply(`Hay más de un destino llamado "${destino}". ¿A cuál te refieres?`, {
+        reply_markup: tecladoDesambiguacion(candidatos),
+      });
+      return;
+    }
+
+    if (candidatos.length === 1) {
+      parseoFinal = { ...parseo, destino: candidatos[0]!.destinoCompleto };
+    }
+    // Si no hay ningún candidato (Nominatim no lo reconoce, o falló la consulta),
+    // seguimos con el destino tal cual lo escribió el usuario.
+  }
+
+  await ejecutarBusquedaAlojamiento(ctx, parseoFinal);
+}
+
+export async function ejecutarBusquedaAlojamiento(ctx: BotContext, parseo: BusquedaParseada): Promise<void> {
+  const destino = parseo.destino!;
+  const fechaInicio = parseo.fechaInicio!;
+  const fechaFin = parseo.fechaFin!;
+  const personas = parseo.personas!;
+  const presupuestoMax = parseo.presupuesto ?? undefined;
 
   const avisoBusqueda = await ctx.reply(
     `🔎 Buscando alojamiento en ${destino} del ${fechaInicio} al ${fechaFin} en Booking, Airbnb, Hostelworld y Agoda... ` +

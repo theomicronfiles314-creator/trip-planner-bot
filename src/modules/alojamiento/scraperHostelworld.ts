@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { nuevoContexto, delayAleatorio } from "../../utils/playwright.js";
 import { crearLogger } from "../../utils/logger.js";
+import { extraerPaisDeDestino } from "./destino.js";
 import type { AlojamientoResultado, ParametrosAlojamiento } from "./types.js";
 
 const logger = crearLogger("scraper:hostelworld");
@@ -32,11 +33,17 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
   await aceptarCookiesSiAparece(page);
   await delayAleatorio();
 
+  // El destino puede venir cualificado con país tras la desambiguación
+  // (p.ej. "Cuenca, España"); a la caja de búsqueda solo le pasamos el nombre
+  // de la ciudad, y usamos el país por separado para elegir la sugerencia correcta.
+  const paisEsperado = extraerPaisDeDestino(params.destino);
+  const nombreCiudad = params.destino.split(",")[0]!.trim();
+
   const buscador = page.getByRole("textbox", { name: "¿Adónde quieres ir?" }).first();
   await buscador.click({ timeout: 8000 });
-  await page.keyboard.type(params.destino, { delay: 60 });
+  await page.keyboard.type(nombreCiudad, { delay: 60 });
 
-  const candidatas = page.locator("li, [role='option']").filter({ hasText: params.destino });
+  const candidatas = page.locator("li, [role='option']").filter({ hasText: nombreCiudad });
   try {
     await candidatas.first().waitFor({ state: "visible", timeout: 8000 });
   } catch {
@@ -45,22 +52,27 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
     return null;
   }
 
-  // Nombres de ciudad ambiguos entre países (p.ej. "Cuenca" en España vs.
-  // Ecuador) pueden traer varias sugerencias: nos quedamos con la que
-  // mencione España. Si ninguna la menciona, tratamos el destino como no
-  // cubierto en España en vez de arriesgarnos a mostrar resultados de otro país.
-  const totalCandidatas = await candidatas.count();
-  let sugerenciaElegida = null;
-  for (let i = 0; i < totalCandidatas; i++) {
-    const texto = await candidatas.nth(i).innerText().catch(() => "");
-    if (/españa/i.test(texto)) {
-      sugerenciaElegida = candidatas.nth(i);
-      break;
+  // Si el destino venía cualificado con un país concreto (nombres de ciudad
+  // ambiguos entre países, p.ej. "Cuenca" en España vs. Ecuador), nos quedamos
+  // con la sugerencia que lo mencione. Si ninguna coincide, tratamos el
+  // destino como no cubierto en ese país en vez de arriesgarnos a mostrar
+  // resultados de otro sitio. Sin país esperado, se usa la primera sugerencia.
+  let sugerenciaElegida = candidatas.first();
+  if (paisEsperado) {
+    const totalCandidatas = await candidatas.count();
+    let encontrada = null;
+    for (let i = 0; i < totalCandidatas; i++) {
+      const texto = await candidatas.nth(i).innerText().catch(() => "");
+      if (texto.toLowerCase().includes(paisEsperado.toLowerCase())) {
+        encontrada = candidatas.nth(i);
+        break;
+      }
     }
-  }
-  if (!sugerenciaElegida) {
-    logger.info(`Hostelworld no tiene ninguna sugerencia en España para destino=${params.destino}`);
-    return null;
+    if (!encontrada) {
+      logger.info(`Hostelworld no tiene ninguna sugerencia en ${paisEsperado} para destino=${params.destino}`);
+      return null;
+    }
+    sugerenciaElegida = encontrada;
   }
   await sugerenciaElegida.click();
 

@@ -1,11 +1,12 @@
 /**
- * Sesga el destino hacia España cuando no se especifica país: este bot está
- * pensado para viajes dentro de España, y nombres de ciudad ambiguos entre
- * países (p.ej. "Cuenca" en España vs. Ecuador) deben resolverse a España por
- * defecto en vez de dejar que cada web decida a su manera. Se usa para
- * plataformas con búsqueda por texto libre (Booking, Airbnb), donde no hay
- * una lista de sugerencias sobre la que elegir.
+ * Si el destino ya viene cualificado con país (p.ej. "Cuenca, España", tras
+ * pasar por la desambiguación de geocoding.ts), devuelve esa parte del país.
+ * Se usa en los scrapers que eligen entre varias sugerencias (Hostelworld,
+ * Agoda) para preferir la que coincida, en vez de asumir siempre España.
  */
-export function sesgarDestinoEspana(destino: string): string {
-  return destino.includes(",") ? destino : `${destino}, España`;
+export function extraerPaisDeDestino(destino: string): string | null {
+  const partes = destino.split(",");
+  if (partes.length < 2) return null;
+  const pais = partes[partes.length - 1]!.trim();
+  return pais || null;
 }
