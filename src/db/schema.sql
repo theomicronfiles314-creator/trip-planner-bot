@@ -22,3 +22,18 @@ CREATE TABLE IF NOT EXISTS cache_resultados (
   resultados_json TEXT NOT NULL,
   expira_en TEXT NOT NULL
 );
+
+-- Storage de sesiones de grammy (busquedaEnCurso, ultimaBusqueda por chat).
+-- Necesario para que la conversación sobreviva entre ciclos de GitHub Actions,
+-- donde cada ejecución arranca en una máquina nueva sin memoria del proceso anterior.
+CREATE TABLE IF NOT EXISTS sesiones (
+  clave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
+
+-- Ajustes de un solo valor (p.ej. el offset de Telegram getUpdates) que también
+-- necesitan persistir entre ciclos.
+CREATE TABLE IF NOT EXISTS ajustes (
+  clave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);

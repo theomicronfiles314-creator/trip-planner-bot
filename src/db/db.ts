@@ -11,7 +11,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 mkdirSync(dirname(config.dbPath), { recursive: true });
 
 export const db = new DatabaseSync(config.dbPath);
-db.exec("PRAGMA journal_mode = WAL");
+// Journal por defecto (no WAL): así todo el estado vive en un único archivo
+// .sqlite, sin -wal/-shm sueltos, que es lo que el workflow de GitHub Actions
+// comitea de vuelta al repo para persistir entre ejecuciones.
 db.exec("PRAGMA foreign_keys = ON");
 
 function migrar(): void {

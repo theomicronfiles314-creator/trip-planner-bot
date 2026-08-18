@@ -1,0 +1,54 @@
+name: Ciclo del bot de viajes
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # permite lanzarlo a mano desde la pestaña Actions, para probar
+
+# Evita que se solapen dos ciclos si uno tarda más de 5 min: el siguiente se
+# pone en cola en vez de arrancar en paralelo (dos ciclos a la vez podrían
+# pisarse el offset de Telegram o el commit de la base de datos).
+concurrency:
+  group: trip-planner-cycle
+  cancel-in-progress: false
+
+permissions:
+  contents: write # necesario para poder hacer commit de data/trip-planner.sqlite
+
+jobs:
+  run-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Cache de Chromium (Playwright)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar un ciclo
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DB_PATH: ./data/trip-planner.sqlite
+        run: npm run cycle
+
+      - name: Guardar estado actualizado (sesiones, caché, offset de Telegram)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/trip-planner.sqlite
+          git diff --staged --quiet || git commit -m "Actualiza estado del bot [skip ci]"
+          git push

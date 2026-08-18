@@ -1,6 +1,7 @@
 import { Bot, session } from "grammy";
 import { config } from "../config.js";
 import { type BotContext, estadoInicial } from "./session.js";
+import { storageSqlite } from "./storageSqlite.js";
 import { manejarStart } from "./handlers/start.js";
 import { manejarMensaje } from "./handlers/message.js";
 import { registrarCallbacks } from "./handlers/callbacks.js";
@@ -11,7 +12,7 @@ const logger = crearLogger("bot");
 export function crearBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegramBotToken);
 
-  bot.use(session({ initial: estadoInicial }));
+  bot.use(session({ initial: estadoInicial, storage: storageSqlite() }));
 
   bot.command("start", manejarStart);
   registrarCallbacks(bot);

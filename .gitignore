@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
-data/*.sqlite
 data/*.sqlite-journal
 data/*.sqlite-wal
 data/*.sqlite-shm
 *.log
+# data/trip-planner.sqlite SÍ se versiona a propósito: en GitHub Actions cada
+# ejecución arranca en una máquina vacía, así que el propio workflow
+# (.github/workflows/cycle.yml) hace commit de la base de datos actualizada al
+# final de cada ciclo, para que la sesión, la caché y el offset de Telegram
+# persistan entre ejecuciones.
