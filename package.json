@@ -1,0 +1,27 @@
+{
+  "name": "trip-planner-bot",
+  "version": "0.1.0",
+  "description": "Bot de Telegram para planificar viajes (alojamiento, coche, vuelos) sin APIs de pago",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "chrono-node": "^2.7.7",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
