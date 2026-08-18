@@ -81,7 +81,18 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
   const personas = parseoCombinado.personas!;
   const presupuestoMax = parseoCombinado.presupuesto ?? undefined;
 
-  const avisoBusqueda = await ctx.reply(`🔎 Buscando alojamiento en ${destino} del ${fechaInicio} al ${fechaFin}...`);
+  const avisoBusqueda = await ctx.reply(
+    `🔎 Buscando alojamiento en ${destino} del ${fechaInicio} al ${fechaFin} en Booking, Airbnb, Hostelworld y Agoda... ` +
+      `Puede tardar hasta un minuto, voy comparando las 4 plataformas a la vez.`
+  );
+
+  // Indicador de "escribiendo..." mientras dura la búsqueda: Telegram lo muestra
+  // unos segundos y hay que repetirlo para que no desaparezca, así se ve que el
+  // bot sigue trabajando y no se ha quedado colgado.
+  const indicadorEscribiendo = setInterval(() => {
+    ctx.replyWithChatAction("typing").catch(() => {});
+  }, 4000);
+  ctx.replyWithChatAction("typing").catch(() => {});
 
   try {
     const { ranking, totalEncontrados, filtradoPorPresupuesto, fallaTecnica, fuentesConFallo } = await buscarAlojamiento({
@@ -92,6 +103,7 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
       ...(presupuestoMax !== undefined ? { presupuestoMax } : {}),
     });
 
+    clearInterval(indicadorEscribiendo);
     await ctx.api.deleteMessage(avisoBusqueda.chat.id, avisoBusqueda.message_id).catch(() => {});
 
     if (ranking.length === 0) {
@@ -136,6 +148,7 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
       link_preview_options: { is_disabled: true },
     });
   } catch (error) {
+    clearInterval(indicadorEscribiendo);
     logger.error("Error inesperado buscando alojamiento", error);
     await ctx.api.deleteMessage(avisoBusqueda.chat.id, avisoBusqueda.message_id).catch(() => {});
     await ctx.reply("Ha ocurrido un error buscando alojamiento. Inténtalo de nuevo en unos minutos 🙏");

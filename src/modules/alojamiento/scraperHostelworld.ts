@@ -36,15 +36,33 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
   await buscador.click({ timeout: 8000 });
   await page.keyboard.type(params.destino, { delay: 60 });
 
-  const primeraSugerencia = page.locator("li, [role='option']").filter({ hasText: params.destino }).first();
+  const candidatas = page.locator("li, [role='option']").filter({ hasText: params.destino });
   try {
-    await primeraSugerencia.waitFor({ state: "visible", timeout: 8000 });
+    await candidatas.first().waitFor({ state: "visible", timeout: 8000 });
   } catch {
     // Sin sugerencias: Hostelworld no cubre este destino (esperable para pueblos pequeños,
     // ya que el catálogo son sobre todo hostales/albergues en ciudades y zonas turísticas).
     return null;
   }
-  await primeraSugerencia.click();
+
+  // Nombres de ciudad ambiguos entre países (p.ej. "Cuenca" en España vs.
+  // Ecuador) pueden traer varias sugerencias: nos quedamos con la que
+  // mencione España. Si ninguna la menciona, tratamos el destino como no
+  // cubierto en España en vez de arriesgarnos a mostrar resultados de otro país.
+  const totalCandidatas = await candidatas.count();
+  let sugerenciaElegida = null;
+  for (let i = 0; i < totalCandidatas; i++) {
+    const texto = await candidatas.nth(i).innerText().catch(() => "");
+    if (/españa/i.test(texto)) {
+      sugerenciaElegida = candidatas.nth(i);
+      break;
+    }
+  }
+  if (!sugerenciaElegida) {
+    logger.info(`Hostelworld no tiene ninguna sugerencia en España para destino=${params.destino}`);
+    return null;
+  }
+  await sugerenciaElegida.click();
 
   const botonIr = page.getByText(/^¡vamos!$/i).first();
   await botonIr.click({ timeout: 8000 });

@@ -178,8 +178,32 @@ function parseFechaUnicaConChrono(texto: string, hoy: Date): string | null {
   return resultado ? aISO(resultado) : null;
 }
 
+/**
+ * Descarta rangos disparatados (p.ej. un año explícito mal capturado por un
+ * error de dictado/transcripción, como "octubre de 2002" en vez de 2026): si
+ * la fecha de inicio ya pasó o cae a más de 2 años vista, no es una fecha de
+ * viaje real y es mejor tratarla como "no se ha podido entender" (el bot
+ * volverá a preguntar) que buscar disponibilidad para una fecha absurda.
+ */
+function esRangoPlausible(rango: RangoFechas, hoy: Date): boolean {
+  const inicio = new Date(rango.fechaInicio);
+  const hoySolo = soloFecha(hoy);
+  const maxFutura = new Date(hoySolo);
+  maxFutura.setFullYear(maxFutura.getFullYear() + 2);
+  return inicio.getTime() >= hoySolo.getTime() && inicio.getTime() <= maxFutura.getTime();
+}
+
 export function extraerRangoFechas(texto: string, hoy: Date = new Date()): RangoFechas | null {
-  return parseRangoConRegex(texto, hoy) ?? parseFinDeSemana(texto, hoy) ?? parseRangoConChrono(texto, hoy);
+  const candidatos = [
+    () => parseRangoConRegex(texto, hoy),
+    () => parseFinDeSemana(texto, hoy),
+    () => parseRangoConChrono(texto, hoy),
+  ];
+  for (const obtener of candidatos) {
+    const rango = obtener();
+    if (rango && esRangoPlausible(rango, hoy)) return rango;
+  }
+  return null;
 }
 
 export function extraerFechaUnica(texto: string, hoy: Date = new Date()): string | null {

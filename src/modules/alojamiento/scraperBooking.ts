@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { nuevoContexto, delayAleatorio } from "../../utils/playwright.js";
 import { crearLogger } from "../../utils/logger.js";
+import { sesgarDestinoEspana } from "./destino.js";
 import type { AlojamientoResultado, ParametrosAlojamiento } from "./types.js";
 
 const logger = crearLogger("scraper:booking");
@@ -13,7 +14,7 @@ function contarNoches(fechaInicio: string, fechaFin: string): number {
 
 function construirUrl(params: ParametrosAlojamiento): string {
   const url = new URL("https://www.booking.com/searchresults.es.html");
-  url.searchParams.set("ss", params.destino);
+  url.searchParams.set("ss", sesgarDestinoEspana(params.destino));
   url.searchParams.set("checkin", params.fechaInicio);
   url.searchParams.set("checkout", params.fechaFin);
   url.searchParams.set("group_adults", String(params.personas));

@@ -35,19 +35,38 @@ async function resolverUrlBusqueda(page: Page, params: ParametrosAlojamiento): P
   await input.click({ timeout: 8000 });
   await page.keyboard.type(params.destino, { delay: 60 });
 
-  const sugerencia = page.getByText(new RegExp(`^${escaparRegex(params.destino)}`, "i")).first();
+  // El desplegable de Agoda mezcla sugerencias de distinto tipo (ciudad, zona,
+  // aeropuerto, e incluso actividades) para el mismo texto. Nos interesan solo
+  // las de formato "Ciudad, País" (así se distingue una entrada de ciudad real
+  // de una de actividades tipo "Cuenca free tour"), y de esas preferimos la que
+  // mencione España — para no confundir p.ej. Cuenca (España) con Cuenca (Ecuador).
+  const candidatas = page.getByText(new RegExp(`^${escaparRegex(params.destino)},\\s`, "i"));
   try {
-    await sugerencia.waitFor({ state: "visible", timeout: 8000 });
+    await candidatas.first().waitFor({ state: "visible", timeout: 8000 });
   } catch {
-    // Sin sugerencias: Agoda no reconoce este destino.
+    // Sin sugerencias de tipo ciudad: Agoda no reconoce este destino.
     return null;
   }
-  await sugerencia.click();
+
+  const totalCandidatas = await candidatas.count();
+  let sugerenciaElegida = candidatas.first();
+  for (let i = 0; i < totalCandidatas; i++) {
+    const texto = await candidatas.nth(i).innerText().catch(() => "");
+    if (/españa/i.test(texto)) {
+      sugerenciaElegida = candidatas.nth(i);
+      break;
+    }
+  }
+  await sugerenciaElegida.click();
   await delayAleatorio();
 
   const botonBuscar = page.getByText(/^buscar$/i).first();
   await botonBuscar.click({ timeout: 8000 });
-  await page.waitForURL(/\/search\?/, { timeout: 15000 });
+  // Si la sugerencia elegida era de un vertical distinto (actividades, vuelos...)
+  // en vez de hoteles, la URL resultante no sería la de búsqueda de alojamiento.
+  await page.waitForURL((url) => /\/search\?/.test(url.pathname + url.search) && !url.pathname.includes("/activities/"), {
+    timeout: 20000,
+  });
 
   const url = new URL(page.url());
   url.searchParams.set("checkIn", params.fechaInicio);
