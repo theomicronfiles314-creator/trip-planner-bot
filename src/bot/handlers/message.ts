@@ -1,7 +1,13 @@
 import type { BotContext } from "../session.js";
 import { asegurarUsuario } from "../../db/usuarios.js";
 import { guardarBusqueda } from "../../db/busquedas.js";
-import { parsearMensaje, combinarParseos, camposFaltantes, preguntaParaFaltantes } from "../../nlp/parser.js";
+import {
+  parsearMensaje,
+  combinarParseos,
+  camposFaltantes,
+  preguntaParaFaltantes,
+  interpretarRespuestaDirecta,
+} from "../../nlp/parser.js";
 import { buscarAlojamiento } from "../../modules/alojamiento/service.js";
 import { formatearResultadoAlojamiento } from "../presenters/alojamiento.js";
 import { tecladoResultado } from "../keyboards.js";
@@ -30,10 +36,24 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
     return accionCancelar(ctx);
   }
 
+  const faltabaAntes = ctx.session.busquedaEnCurso ? camposFaltantes(ctx.session.busquedaEnCurso) : [];
+
   const parseoNuevo = parsearMensaje(texto);
-  const parseoCombinado = ctx.session.busquedaEnCurso
+  let parseoCombinado = ctx.session.busquedaEnCurso
     ? combinarParseos(ctx.session.busquedaEnCurso, parseoNuevo)
     : parseoNuevo;
+
+  // Si el bot solo había preguntado por un dato y el parseo normal no lo ha
+  // rellenado, interpretamos el mensaje completo como respuesta directa a esa
+  // pregunta (p.ej. "Cuenca" en respuesta a "¿me dices el destino?"), para no
+  // quedarnos repitiendo la misma pregunta en bucle.
+  if (faltabaAntes.length === 1) {
+    const campo = faltabaAntes[0]!;
+    if (camposFaltantes(parseoCombinado).includes(campo)) {
+      const directo = interpretarRespuestaDirecta(campo, texto);
+      if (directo) parseoCombinado = { ...parseoCombinado, ...directo };
+    }
+  }
 
   const faltan = camposFaltantes(parseoCombinado);
 

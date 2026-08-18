@@ -5,6 +5,20 @@ import { extraerPersonas } from "./personas.js";
 import { extraerPresupuesto } from "./presupuesto.js";
 import { CAMPO_LABEL, type BusquedaParseada, type CampoFaltante } from "./types.js";
 
+const NUMEROS_TEXTO: Record<string, number> = {
+  uno: 1,
+  una: 1,
+  dos: 2,
+  tres: 3,
+  cuatro: 4,
+  cinco: 5,
+  seis: 6,
+  siete: 7,
+  ocho: 8,
+  nueve: 9,
+  diez: 10,
+};
+
 export function parsearMensaje(texto: string, hoy: Date = new Date()): BusquedaParseada {
   const tipo = detectarTipo(texto);
   const rango = extraerRangoFechas(texto, hoy);
@@ -56,6 +70,40 @@ export function camposFaltantes(parsed: BusquedaParseada): CampoFaltante[] {
   if (!parsed.fechaFin && parsed.tipo !== "vuelos") faltan.push("fechaFin");
   if (parsed.tipo !== "vuelos" && !parsed.personas) faltan.push("personas");
   return faltan;
+}
+
+/**
+ * Cuando el bot ya ha preguntado por UN dato concreto, el usuario suele responder
+ * con una frase corta y directa ("Cuenca", "2", "dos") que no encaja con los
+ * patrones pensados para el mensaje libre inicial (que esperan "en Cuenca",
+ * "2 personas", etc.). Esta función interpreta esa respuesta corta de forma más
+ * permisiva para el campo concreto que se preguntó, evitando que el bot se quede
+ * repitiendo la misma pregunta en bucle.
+ */
+export function interpretarRespuestaDirecta(
+  campo: CampoFaltante,
+  texto: string
+): Partial<BusquedaParseada> | null {
+  const limpio = texto.trim().replace(/[.!?¡¿]+$/g, "").trim();
+  if (!limpio) return null;
+
+  if (campo === "destino" || campo === "origen") {
+    if (limpio.length > 60) return null; // probablemente no es una respuesta corta directa
+    const capitalizado = limpio
+      .split(/\s+/)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+      .join(" ");
+    return campo === "destino" ? { destino: capitalizado } : { origen: capitalizado };
+  }
+
+  if (campo === "personas") {
+    const match = limpio.match(new RegExp(`^(\\d{1,2}|${Object.keys(NUMEROS_TEXTO).join("|")})$`, "i"));
+    if (!match?.[1]) return null;
+    const numero = NUMEROS_TEXTO[match[1].toLowerCase()] ?? Number(match[1]);
+    return numero > 0 ? { personas: numero } : null;
+  }
+
+  return null;
 }
 
 export function preguntaParaFaltantes(faltan: CampoFaltante[]): string {
