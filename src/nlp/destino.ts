@@ -1,6 +1,11 @@
 const STOP = "(?:del|desde|para|con|hasta|al|el)";
 const PALABRA = `(?:(?!${STOP}\\b)[a-zà-ÿ]+)`;
 const LIMITE = `(?=\\s+${STOP}\\b|\\s*,|\\s+\\d|$)`;
+// País opcional tras el destino ("Cuenca, Ecuador"): si el usuario ya lo da
+// explícito, se conserva en vez de recortarlo en la coma, para no tener que
+// preguntar después a qué país se refería. El límite final se comprueba una
+// única vez, después de este grupo opcional (lo consuma o no).
+const PAIS_OPCIONAL = `(?:\\s*,\\s*(${PALABRA}(?:\\s+${PALABRA}){0,2}))?`;
 
 function capitalizar(texto: string): string {
   return texto
@@ -38,20 +43,28 @@ export function extraerOrigenDestino(texto: string): OrigenDestino {
   return { origen: null, destino: null };
 }
 
-/** Para alojamiento/coche: "a Altea", "en Valencia", "cerca de Alcañiz". */
+function combinarCiudadPais(ciudad: string, pais: string | undefined): string {
+  return pais ? `${capitalizar(ciudad)}, ${capitalizar(pais)}` : capitalizar(ciudad);
+}
+
+/**
+ * Para alojamiento/coche: "a Altea", "en Valencia", "cerca de Alcañiz", y
+ * opcionalmente con país explícito ("en Cuenca, Ecuador") para evitar tener
+ * que preguntar después a qué país se refería.
+ */
 export function extraerDestino(texto: string): string | null {
-  const patronCercaDe = new RegExp(`\\bcerca\\s+de\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${LIMITE}`, "i");
-  const patronEn = new RegExp(`\\ben\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${LIMITE}`, "i");
-  const patronA = new RegExp(`\\ba\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${LIMITE}`, "i");
+  const patronCercaDe = new RegExp(`\\bcerca\\s+de\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${PAIS_OPCIONAL}${LIMITE}`, "i");
+  const patronEn = new RegExp(`\\ben\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${PAIS_OPCIONAL}${LIMITE}`, "i");
+  const patronA = new RegExp(`\\ba\\s+(${PALABRA}(?:\\s+${PALABRA}){0,2})${PAIS_OPCIONAL}${LIMITE}`, "i");
 
   const matchCercaDe = texto.match(patronCercaDe);
-  if (matchCercaDe?.[1]) return capitalizar(matchCercaDe[1]);
+  if (matchCercaDe?.[1]) return combinarCiudadPais(matchCercaDe[1], matchCercaDe[2]);
 
   const matchEn = texto.match(patronEn);
-  if (matchEn?.[1]) return capitalizar(matchEn[1]);
+  if (matchEn?.[1]) return combinarCiudadPais(matchEn[1], matchEn[2]);
 
   const matchA = texto.match(patronA);
-  if (matchA?.[1]) return capitalizar(matchA[1]);
+  if (matchA?.[1]) return combinarCiudadPais(matchA[1], matchA[2]);
 
   return null;
 }

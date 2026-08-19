@@ -82,30 +82,40 @@ export async function manejarMensaje(ctx: BotContext): Promise<void> {
 /**
  * La búsqueda ya tiene todos los datos obligatorios. Antes de lanzar el
  * scraping comprueba si el destino es ambiguo entre países (p.ej. "Cuenca"
- * existe como ciudad relevante en España y en Ecuador): si lo es, pregunta con
- * botones y no busca todavía — se retoma en el callback de desambiguación
- * (ver bot/handlers/callbacks.ts). Si no hay ambigüedad, sigue directo.
+ * existe como ciudad relevante en España y en Ecuador).
+ *
+ * En el modo de ciclo único (GitHub Actions, cada 5 min) cada pregunta extra
+ * cuesta un ciclo entero de espera, así que en vez de preguntar y bloquear la
+ * búsqueda, se busca directamente con la coincidencia más relevante y se avisa
+ * de las alternativas por si acaso — con botones para corregir sin tener que
+ * volver a escribir todo, pero sin esperar a que el usuario responda.
  */
 export async function procesarBusquedaCompleta(ctx: BotContext, parseo: BusquedaParseada): Promise<void> {
   let parseoFinal = parseo;
   const destino = parseo.destino!;
 
   // Si el destino ya viene cualificado con país (tras una desambiguación
-  // previa, o porque el usuario ya lo escribió así, p.ej. "Cuenca, Ecuador")
-  // no hace falta volver a preguntar.
+  // previa, o porque el usuario ya lo escribió así, p.ej. "en Cuenca, Ecuador")
+  // no hace falta volver a preguntar ni a adivinar.
   if (!destino.includes(",")) {
     const candidatos = await buscarCandidatosDestino(destino);
 
-    if (candidatos.length >= 2) {
-      ctx.session.destinoPendiente = { parseo, candidatos };
-      await ctx.reply(`Hay más de un destino llamado "${destino}". ¿A cuál te refieres?`, {
-        reply_markup: tecladoDesambiguacion(candidatos),
-      });
-      return;
+    if (candidatos.length >= 1) {
+      parseoFinal = { ...parseo, destino: candidatos[0]!.destinoCompleto };
     }
 
-    if (candidatos.length === 1) {
-      parseoFinal = { ...parseo, destino: candidatos[0]!.destinoCompleto };
+    if (candidatos.length >= 2) {
+      ctx.session.destinoPendiente = { parseo, candidatos };
+      const alternativas = candidatos
+        .slice(1)
+        .map((c) => c.destinoCompleto)
+        .join(" / ");
+      await ctx.reply(
+        `📍 "${destino}" también existe en otros sitios (${alternativas}). Voy a buscar en ` +
+          `${candidatos[0]!.destinoCompleto} por ser la coincidencia más relevante — si querías otro, ` +
+          `pulsa el botón o escríbelo con el país incluido y repito la búsqueda.`,
+        { reply_markup: tecladoDesambiguacion(candidatos) }
+      );
     }
     // Si no hay ningún candidato (Nominatim no lo reconoce, o falló la consulta),
     // seguimos con el destino tal cual lo escribió el usuario.
