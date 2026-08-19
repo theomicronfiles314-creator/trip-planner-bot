@@ -111,10 +111,25 @@ function parsearRatingYReviews(texto: string): { rating: number | null; numeroRe
 }
 
 /**
+ * Agoda es la plataforma menos fiable de las cuatro (lista virtualizada, más
+ * lenta y con timeouts intermitentes al navegar tras elegir la sugerencia,
+ * incluso cuando la lógica es correcta). Un solo reintento con un contexto
+ * nuevo suele bastar para que funcione, así que se prueba dos veces antes de
+ * darlo por fallido de verdad.
+ */
+export async function buscarEnAgoda(params: ParametrosAlojamiento): Promise<AlojamientoResultado[] | null> {
+  const primerIntento = await intentarBuscarEnAgoda(params);
+  if (primerIntento !== null) return primerIntento;
+
+  logger.warn(`Primer intento de Agoda fallido para destino=${params.destino}, reintentando una vez más`);
+  return intentarBuscarEnAgoda(params);
+}
+
+/**
  * `null` = fallo técnico: no se debe cachear.
  * `[]` = búsqueda correcta (destino no reconocido por Agoda o sin disponibilidad): sí se debe cachear.
  */
-export async function buscarEnAgoda(params: ParametrosAlojamiento): Promise<AlojamientoResultado[] | null> {
+async function intentarBuscarEnAgoda(params: ParametrosAlojamiento): Promise<AlojamientoResultado[] | null> {
   const noches = contarNoches(params.fechaInicio, params.fechaFin);
   const contexto = await nuevoContexto();
   const page = await contexto.newPage();

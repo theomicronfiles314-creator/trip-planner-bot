@@ -1,7 +1,7 @@
 import { GrammyError } from "grammy";
 import type { BotContext } from "./session.js";
 import { tecladoResultado } from "./keyboards.js";
-import { formatearResultadoAlojamiento, ICONO_FUENTE } from "./presenters/alojamiento.js";
+import { formatearResultadoAlojamiento, escaparHtml, ICONO_FUENTE } from "./presenters/alojamiento.js";
 import { crearLogger } from "../utils/logger.js";
 
 const logger = crearLogger("bot:acciones");
@@ -62,7 +62,7 @@ export async function accionVerTodas(ctx: BotContext): Promise<void> {
   const top = busqueda.resultados.slice(0, 10);
   const lineas = top.map(
     (r, i) =>
-      `${i + 1}. ${ICONO_FUENTE[r.fuente]} ${r.nombre} — ${r.precioTotal.toFixed(0)} € total, ⭐ ${r.rating?.toFixed(1) ?? "s/v"} (${r.numeroReviews})`
+      `${i + 1}. ${ICONO_FUENTE[r.fuente]} ${escaparHtml(r.nombre)} — ${r.precioTotal.toFixed(0)} € total, ⭐ ${r.rating?.toFixed(1) ?? "s/v"} (${r.numeroReviews})`
   );
 
   await ctx.reply(

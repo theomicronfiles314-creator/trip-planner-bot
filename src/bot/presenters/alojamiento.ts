@@ -48,12 +48,18 @@ export function formatearResultadoAlojamiento(
     lineas.push(`📍 ${escaparHtml(resultado.distanciaTexto)}`);
   }
 
-  lineas.push("", `🔗 <a href="${resultado.url}">Ver y reservar</a>`);
+  lineas.push("", `🔗 <a href="${escaparHtml(resultado.url)}">Ver y reservar</a>`);
   lineas.push("", `Opción ${posicion + 1} de ${busqueda.resultados.length} · ${busqueda.destino}, ${busqueda.fechaInicio} → ${busqueda.fechaFin}`);
 
   return lineas.join("\n");
 }
 
-function escaparHtml(texto: string): string {
+/**
+ * Escapa caracteres especiales de HTML. Imprescindible para cualquier texto
+ * dinámico (nombres de hotel, URLs) que se inserte en un mensaje con
+ * parse_mode HTML: sin esto, un nombre con "&" (p.ej. "B&B Hotel", muy
+ * habitual) hace que Telegram rechace el mensaje entero por HTML inválido.
+ */
+export function escaparHtml(texto: string): string {
   return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
